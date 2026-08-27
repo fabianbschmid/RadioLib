@@ -15,6 +15,9 @@
 // LR2021 physical layer properties
 #define RADIOLIB_LR2021_FREQUENCY_STEP_SIZE                     1.0
 #define RADIOLIB_LR2021_MAX_PACKET_LENGTH                       255
+
+// O-QPSK 802.15.4 MPDU size is capped at 127 bytes (incl. FCS when FCS_ON)
+#define RADIOLIB_LR2021_MAX_OQPSK_PAYLOAD_LEN                   127
 #define RADIOLIB_LR2021_CRYSTAL_FREQ                            32.0
 #define RADIOLIB_LR2021_DIV_EXPONENT                            25
 
@@ -204,6 +207,30 @@ class LR2021: public LRxxxx {
       \returns \ref status_codes
     */
     int16_t beginFLRC(float freq = 434.0, uint16_t br = 650, uint8_t cr = RADIOLIB_LR2021_FLRC_CR_2_3, int8_t pwr = 10, uint16_t preambleLength = 16, uint8_t dataShaping = RADIOLIB_SHAPING_0_5, float tcxoVoltage = 1.6);
+
+    /*!
+      \brief Initialization method for O-QPSK 802.15.4 modem (fixed 250 kbps, 2 Mcps).
+      \details This method initializes the O-QPSK modem with the specified configuration.
+      Address filtering is disabled and FCS is automatically generated in TX / validated in RX.
+      Supports designated initializers when using C++14 or above.
+      \param config Initialization configuration.
+      \returns \ref status_codes
+    */
+    int16_t beginOQPSK(const ConfigOQPSK_t& config);
+
+    /*!
+      \deprecated Use \ref beginOQPSK(const ConfigOQPSK_t& config) instead.
+      \brief Initialization method for O-QPSK 802.15.4 modem (fixed 250 kbps, 2 Mcps).
+      \param freq Carrier frequency in MHz. Defaults to 2400.0 MHz.
+      \param rxBw Receiver bandwidth in kHz. Defaults to 2222.0 kHz.
+      \param power Output power in dBm. Defaults to 10 dBm.
+      \param preambleLength Preamble length in bits. Defaults to 32 bits.
+      \param tcxoVoltage TCXO reference voltage to be set. Defaults to 1.6 V.
+      If you are seeing -706/-707 error codes, it likely means you are using non-0 value for module with XTAL.
+      To use XTAL, either set this value to 0, or set LR2021::XTAL to true.
+      \returns \ref status_codes
+    */
+    int16_t beginOQPSK(float freq = 2400.0, float rxBw = 2222.0, int8_t power = 10, uint16_t preambleLength = 32, float tcxoVoltage = 1.6);
 
     /*!
       \brief Blocking binary transmit method.
@@ -928,8 +955,14 @@ class LR2021: public LRxxxx {
     uint8_t gainModeHf = RADIOLIB_LR2021_RX_BOOST_HF;
 
     // cached FLRC parameters
+    // FLRC keeps its own sync word length (in bytes), because the shared LRxxxx::syncWordLength
+    // is consumed by the time-on-air math and holds the length in bits
     uint16_t bitRateFlrc = 0;
-    uint8_t codingRateFlrc = 0;
+    uint8_t codingRateFlrc = 0, syncWordLenFlrc = 0;
+
+    // cached OOK line coding (the Manchester field of SetOokPacketParams)
+    // this is separate from whitening, which OOK configures via SetOokWhiteningParams
+    uint8_t ookEncoding = RADIOLIB_LR2021_OOK_MANCHESTER_OFF;
 
     // pointers to PA lookup tables - may be overridden by the user
     LR2021PaTableEntry_t* paOptTable[2] = { nullptr, nullptr };
@@ -939,6 +972,7 @@ class LR2021: public LRxxxx {
     int16_t config(uint8_t modem);
     int16_t setPacketMode(uint8_t mode, uint8_t len);
     int16_t startCad(uint8_t symbolNum, uint8_t detPeak, bool fast, uint8_t exitMode, RadioLibTime_t timeout);
+    size_t getGfskOokBits(size_t len, uint8_t enc);
 
     // chip control commands
     int16_t readRadioRxFifo(uint8_t* data, size_t len);

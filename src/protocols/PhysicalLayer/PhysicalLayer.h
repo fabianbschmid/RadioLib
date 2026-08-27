@@ -373,6 +373,17 @@ struct ConfigBLE_t {
   uint8_t dataShaping = RADIOLIB_SHAPING_0_5;
 };
 
+struct ConfigOQPSK_t {
+  /*! \brief Carrier frequency in MHz. Defaults to 2400.0 MHz. */
+  float frequency = 2400.0;
+  /*! \brief Receiver bandwidth in kHz. Defaults to 2222.0 kHz. */
+  float receiverBandwidth = 2222.0;
+  /*! \brief Output power in dBm. Defaults to 10 dBm. */
+  int8_t power = 10;
+  /*! \brief Preamble length in bits. Defaults to 32 bits. */
+  uint16_t preambleLength = 32;
+};
+
 /*!
   \defgroup module_config_vars Module Hardware Configuration Variables
   \brief A centralized list of all module configurations which are not part of the various Config_t structures.

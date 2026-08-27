@@ -5,6 +5,22 @@
 
 #include <string.h>
 #include <math.h>
+#include <zephyr/autoconf.h>
+
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/device.h>
+
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_DECLARE(lora, CONFIG_LORA_LOG_LEVEL);
+
+
+#define LORA_TX_PIN_NODE DT_ALIAS(lora_tx_pin)
+#define LORA_RX_PIN_NODE DT_ALIAS(lora_rx_pin)
+static const struct gpio_dt_spec lora_tx_pin = GPIO_DT_SPEC_GET(LORA_TX_PIN_NODE, gpios);
+static const struct gpio_dt_spec lora_rx_pin = GPIO_DT_SPEC_GET(LORA_RX_PIN_NODE, gpios);
+
 
 #if !RADIOLIB_EXCLUDE_LR2021
 
@@ -90,14 +106,30 @@ int16_t LR2021::setRx(uint32_t timeout) {
   uint8_t buff[] = {
     (uint8_t)((timeout >> 16) & 0xFF), (uint8_t)((timeout >> 8) & 0xFF), (uint8_t)(timeout & 0xFF),
   };
-  return(this->SPIcommand(RADIOLIB_LR2021_CMD_SET_RX, true, buff, sizeof(buff)));
+  gpio_pin_set_dt(&lora_rx_pin, 1);
+  uint16_t retVal =  this->SPIcommand(RADIOLIB_LR2021_CMD_SET_RX, true, buff, sizeof(buff));
+  gpio_pin_set_dt(&lora_rx_pin, 0);
+
+  static uint32_t counter = 0;
+  if (CONFIG_LORA_REPORTING_INTERVAL > 0 && (counter++ % CONFIG_LORA_REPORTING_INTERVAL) == 0) {
+    LOG_INF("RX started");
+  }
+  return(retVal);
 }
 
 int16_t LR2021::setTx(uint32_t timeout) {
   uint8_t buff[] = {
     (uint8_t)((timeout >> 16) & 0xFF), (uint8_t)((timeout >> 8) & 0xFF), (uint8_t)(timeout & 0xFF),
   };
-  return(this->SPIcommand(RADIOLIB_LR2021_CMD_SET_TX, true, buff, sizeof(buff)));
+  gpio_pin_set_dt(&lora_tx_pin, 1);
+  uint16_t retVal = this->SPIcommand(RADIOLIB_LR2021_CMD_SET_TX, true, buff, sizeof(buff));
+  gpio_pin_set_dt(&lora_tx_pin, 0);
+  static uint32_t counter = 0;
+  if (CONFIG_LORA_REPORTING_INTERVAL > 0 && (counter++ % CONFIG_LORA_REPORTING_INTERVAL) == 0) {
+    LOG_INF("TX started");
+  }
+
+  return(retVal);
 }
 
 int16_t LR2021::setRxTxFallbackMode(uint8_t mode) {
