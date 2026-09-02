@@ -120,6 +120,10 @@
 #define RADIOLIB_LR2021_CMD_SET_BLE_TX                          (0x0262)
 #define RADIOLIB_LR2021_CMD_GET_BLE_RX_STATS                    (0x0264)
 #define RADIOLIB_LR2021_CMD_GET_BLE_PACKET_STATUS               (0x0265)
+
+// undocumented command used by the Semtech LR20xx driver workarounds (lr20xx_workarounds.c);
+// it is not listed in the datasheet command table, the payloads are replayed verbatim
+#define RADIOLIB_LR2021_CMD_INTERNAL_PARAM_WRITE                (0x0230)
 #define RADIOLIB_LR2021_CMD_SET_OQPSK_PARAMS                    (0x029F)
 #define RADIOLIB_LR2021_CMD_GET_OQPSK_RX_STATS                  (0x02A0)
 #define RADIOLIB_LR2021_CMD_GET_OQPSK_PACKET_STATUS             (0x02A1)
@@ -489,6 +493,30 @@
 
 // RADIOLIB_LR2021_CMD_SET_GFSK_SYNCWORD
 #define RADIOLIB_LR2021_GFSK_SYNC_WORD_LEN                      (8)
+
+// RADIOLIB_LR2021_CMD_SET_BLE_MODULATION_PARAMS
+#define RADIOLIB_LR2021_BLE_PHY_1M                              (0x00UL << 0)   //  7     0     BLE PHY: LE 1M (1 Mbps, uncoded)
+#define RADIOLIB_LR2021_BLE_PHY_2M                              (0x01UL << 0)   //  7     0              LE 2M (2 Mbps, uncoded)
+#define RADIOLIB_LR2021_BLE_PHY_CODED_S2                        (0x02UL << 0)   //  7     0              LE Coded S=2 (500 kbps)
+#define RADIOLIB_LR2021_BLE_PHY_CODED_S8                        (0x03UL << 0)   //  7     0              LE Coded S=8 (125 kbps)
+#define RADIOLIB_LR2021_BLE_RX_BW_AUTO                          (0xFFUL << 0)   //  7     0     Rx bandwidth: selected automatically from the PHY
+
+// RADIOLIB_LR2021_CMD_SET_BLE_CHANNEL_PARAMS
+#define RADIOLIB_LR2021_BLE_CHANNEL_TYPE_ADV                    (0x00UL << 0)   //  3     0     channel type: advertising PDU
+#define RADIOLIB_LR2021_BLE_CHANNEL_TYPE_DATA_16BIT             (0x01UL << 0)   //  3     0                   data PDU, 16-bit header
+#define RADIOLIB_LR2021_BLE_CHANNEL_TYPE_DATA_24BIT             (0x02UL << 0)   //  3     0                   data PDU, 24-bit header
+#define RADIOLIB_LR2021_BLE_CRC_IN_FIFO_OFF                     (0x00UL << 4)   //  4     4     CRC appended to the Rx FIFO: disabled
+#define RADIOLIB_LR2021_BLE_CRC_IN_FIFO_ON                      (0x01UL << 4)   //  4     4                                  enabled
+#define RADIOLIB_LR2021_BLE_WHITENING_OFF                       (0x00)          //                whitening init 0 disables whitening (test mode)
+
+// Bluetooth Core specification constants for the primary advertising channels
+#define RADIOLIB_LR2021_BLE_ADV_ACCESS_ADDRESS                  (0x8E89BED6UL)
+#define RADIOLIB_LR2021_BLE_ADV_CRC_INIT                        (0x555555UL)
+
+// the PDU length field of SetBleTxPduLen/SetBleTx is 8-bit, and the PDU always carries
+// at least the 16-bit header (the 3 CRC bytes are appended by the chip and not counted)
+#define RADIOLIB_LR2021_MIN_BLE_PDU_LEN                         (2)
+#define RADIOLIB_LR2021_MAX_BLE_PDU_LEN                         (255)
 
 // RADIOLIB_LR2021_CMD_SET_OQPSK_PARAMS
 #define RADIOLIB_LR2021_OQPSK_TYPE_15_4                         (0x00UL << 0)   //  7     0     OQPSK type: 802.15.4 PHY, 250 kbps bit rate

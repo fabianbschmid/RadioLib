@@ -285,6 +285,53 @@ int16_t LR2021::beginOQPSK(float freq, float rxBw, int8_t power, uint16_t preamb
   return(beginOQPSK(cfg));
 }
 
+int16_t LR2021::beginBLE(const LR2021BleConfig_t& cfg) {
+  if(cfg.phy > RADIOLIB_LR2021_BLE_PHY_CODED_S8) {
+    return(RADIOLIB_ERR_INVALID_MODULATION_PARAMETERS);
+  }
+  if(cfg.channelType > RADIOLIB_LR2021_BLE_CHANNEL_TYPE_DATA_24BIT) {
+    return(RADIOLIB_ERR_INVALID_MODULATION_PARAMETERS);
+  }
+
+  this->blePhy = cfg.phy;
+  this->bleCrcInFifo = cfg.crcInFifo;
+
+  // set module properties and perform initial setup
+  int16_t state = this->modSetup(cfg.frequency, RADIOLIB_LR2021_PACKET_TYPE_BLE);
+  RADIOLIB_ASSERT(state);
+
+  state = setOutputPower(cfg.power);
+  RADIOLIB_ASSERT(state);
+
+  // the Rx bandwidth is left on automatic, the chip derives it from the PHY;
+  // this also applies the LE 2M preamble length workaround when needed
+  state = setBleModulationParams(cfg.phy);
+  RADIOLIB_ASSERT(state);
+
+  state = setBleChannelParams(cfg.channelType, cfg.whiteningInit, cfg.crcInit, cfg.accessAddress, cfg.crcInFifo);
+  RADIOLIB_ASSERT(state);
+
+  // both LE Coded PHYs need the syncword detection and frequency drift patches,
+  // and both have to be applied after the modulation and packet parameters
+  if((cfg.phy == RADIOLIB_LR2021_BLE_PHY_CODED_S2) || (cfg.phy == RADIOLIB_LR2021_BLE_PHY_CODED_S8)) {
+    state = bleFixCodedSyncWord();
+    RADIOLIB_ASSERT(state);
+
+    state = bleFixCodedFreqDrift();
+  }
+  return(state);
+}
+
+int16_t LR2021::beginBLE(float freq, uint8_t phy, uint8_t channel, int8_t power, float tcxoVoltage) {
+  LR2021BleConfig_t cfg;
+  cfg.frequency = freq;
+  cfg.phy = phy;
+  cfg.whiteningInit = bleWhiteningInit(channel);
+  cfg.power = power;
+  this->tcxoVoltage = tcxoVoltage;
+  return(beginBLE(cfg));
+}
+
 int16_t LR2021::transmit(const uint8_t* data, size_t len, uint8_t addr) {
    // set mode to standby
   int16_t state = standby();
@@ -600,10 +647,12 @@ int16_t LR2021::readData(uint8_t* data, size_t len) {
   uint8_t modem = RADIOLIB_LR2021_PACKET_TYPE_NONE;
   state = getPacketType(&modem);
   RADIOLIB_ASSERT(state);
-  if((modem != RADIOLIB_LR2021_PACKET_TYPE_LORA) && 
-     (modem != RADIOLIB_LR2021_PACKET_TYPE_GFSK) && 
-     (modem != RADIOLIB_LR2021_PACKET_TYPE_FLRC) && 
-     (modem != RADIOLIB_LR2021_PACKET_TYPE_OOK)) {
+  if((modem != RADIOLIB_LR2021_PACKET_TYPE_LORA) &&
+     (modem != RADIOLIB_LR2021_PACKET_TYPE_GFSK) &&
+     (modem != RADIOLIB_LR2021_PACKET_TYPE_FLRC) &&
+     (modem != RADIOLIB_LR2021_PACKET_TYPE_OOK) &&
+     (modem != RADIOLIB_LR2021_PACKET_TYPE_OQPSK) &&
+     (modem != RADIOLIB_LR2021_PACKET_TYPE_BLE)) {
     return(RADIOLIB_ERR_WRONG_MODEM);
   }
 
@@ -999,7 +1048,34 @@ RadioLibTime_t LR2021::getTimeOnAir(size_t len) {
 
       // now calculate the real time on air
       return((float)(n_uncoded_bits + n_coded_bits) / (float)(this->bitRate / 1000.0f));
-    } 
+    }
+
+    // the BLE packet structure is fixed by the Bluetooth Core specification, so the
+    // time on air only depends on the PHY and the PDU length - `len` is the number of
+    // PDU bytes written to the FIFO, the 3 CRC bytes are appended by the chip
+    case(RADIOLIB_LR2021_PACKET_TYPE_BLE): {
+      switch(this->blePhy) {
+        case(RADIOLIB_LR2021_BLE_PHY_1M):
+          // 1 byte preamble + 4 byte access address + PDU + 3 byte CRC, 1 us per bit
+          return((RadioLibTime_t)((1 + 4 + len + 3)*8));
+
+        case(RADIOLIB_LR2021_BLE_PHY_2M):
+          // 2 byte preamble, and two bits per microsecond
+          return((RadioLibTime_t)((2 + 4 + len + 3)*4));
+
+        case(RADIOLIB_LR2021_BLE_PHY_CODED_S2):
+        case(RADIOLIB_LR2021_BLE_PHY_CODED_S8): {
+          // FEC block 1 is always coded S=8: 80 us preamble, 32 bit access address,
+          // 2 bit coding indicator and the 3 bit TERM1, all at 8 us per bit
+          const RadioLibTime_t block1 = 80 + (32 + 2 + 3)*8;
+
+          // FEC block 2 holds the PDU, the CRC and the 3 bit TERM2 at the payload coding
+          uint8_t s = (this->blePhy == RADIOLIB_LR2021_BLE_PHY_CODED_S2) ? 2 : 8;
+          return(block1 + (RadioLibTime_t)(((len + 3)*8 + 3)*s));
+        }
+      }
+      return(0);
+    }
   }
 
   RADIOLIB_DEBUG_BASIC_PRINTLN("Called getTimeOnAir() for invalid modem (%02x)!", type);
@@ -1037,12 +1113,17 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
       uint8_t modem = RADIOLIB_LR2021_PACKET_TYPE_NONE;
       state = getPacketType(&modem);
       RADIOLIB_ASSERT(state);
-      if((modem != RADIOLIB_LR2021_PACKET_TYPE_LORA) && 
-        (modem != RADIOLIB_LR2021_PACKET_TYPE_GFSK) && 
-        (modem != RADIOLIB_LR2021_PACKET_TYPE_FLRC) && 
-        (modem != RADIOLIB_LR2021_PACKET_TYPE_OOK)) {
+      if((modem != RADIOLIB_LR2021_PACKET_TYPE_LORA) &&
+        (modem != RADIOLIB_LR2021_PACKET_TYPE_GFSK) &&
+        (modem != RADIOLIB_LR2021_PACKET_TYPE_FLRC) &&
+        (modem != RADIOLIB_LR2021_PACKET_TYPE_OOK) &&
+        (modem != RADIOLIB_LR2021_PACKET_TYPE_OQPSK) &&
+        (modem != RADIOLIB_LR2021_PACKET_TYPE_BLE)) {
         return(RADIOLIB_ERR_WRONG_MODEM);
       }
+
+
+      // RADIOLIB_DEBUG_BASIC_PRINTLN("rx len: %d", cfg->receive.len);
 
       // in implicit LoRa header mode, use the provided length if it is nonzero
       // otherwise we trust the user has previously set the payload length manually
@@ -1086,11 +1167,12 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
       } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
         state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLenFlrc, 1, 0x01, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK,
           (this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED) ? this->implicitLen : RADIOLIB_LR2021_MAX_PACKET_LENGTH);
-      
+
       } else {
-        return(RADIOLIB_ERR_WRONG_MODEM);
+        // OQPSK and BLE have no separate Rx packet parameters - the length comes from the
+        // received header, and the rest was already programmed by their begin methods
       }
-      
+
       RADIOLIB_ASSERT(state);
 
       // if max(uint32_t) is used, revert to RxContinuous
@@ -1105,6 +1187,8 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
       if(cfg->transmit.len > RADIOLIB_LR2021_MAX_PACKET_LENGTH) {
         return(RADIOLIB_ERR_PACKET_TOO_LONG);
       }
+      // RADIOLIB_DEBUG_BASIC_PRINTLN("Tx len: %d", cfg->transmit.len);
+
 
       // maximum packet length is decreased by 1 when address filtering is active
       //! \todo [LR2021] implement GFSK address filtering
@@ -1124,7 +1208,19 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
 
       } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
         state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLenFlrc, 1, 0x01, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, cfg->transmit.len);
-      
+
+      } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_OQPSK) {
+        state = setOqpskPacketLen(cfg->transmit.len);
+
+      } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_BLE) {
+        // the buffer is the PDU, including its own header and excluding the CRC that
+        // the chip appends - SetBleTx would also start the transmission right away,
+        // which launchMode() does separately
+        if(cfg->transmit.len < RADIOLIB_LR2021_MIN_BLE_PDU_LEN) {
+          return(RADIOLIB_ERR_PACKET_TOO_SHORT);
+        }
+        state = setBleTxPduLen(cfg->transmit.len);
+
       } else if(modem != RADIOLIB_LR2021_PACKET_TYPE_LR_FHSS) {
         return(RADIOLIB_ERR_WRONG_MODEM);
       }
@@ -1244,6 +1340,8 @@ float LR2021::getRSSI(bool packet, bool skipReceive) {
     state = this->getFlrcPacketStatus(NULL, &rssi, NULL, NULL);
   } else if (modem == RADIOLIB_LR2021_PACKET_TYPE_OQPSK) {
     state = this->getOqpskPacketStatus(NULL, NULL, &rssi, NULL, NULL);
+  } else if (modem == RADIOLIB_LR2021_PACKET_TYPE_BLE) {
+    state = this->getBlePacketStatus(NULL, &rssi, NULL, NULL);
   } else {
     return(0);
   }
