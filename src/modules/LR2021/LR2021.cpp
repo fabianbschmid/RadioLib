@@ -272,6 +272,10 @@ int16_t LR2021::beginOQPSK(const ConfigOQPSK_t& cfg) {
   // address filtering off, FCS auto (chip appends in TX, validates+strips in RX)
   state = setOqpskParams(0, this->rxBandwidth, RADIOLIB_LR2021_MAX_OQPSK_PAYLOAD_LEN,
     cfg.preambleLength, false, false);
+  RADIOLIB_ASSERT(state);
+
+  // the preamble length cannot be read back from the chip, but the time on air needs it
+  this->oqpskPreambleLen = cfg.preambleLength;
   return(state);
 }
 
@@ -365,7 +369,8 @@ int16_t LR2021::transmit(const uint8_t* data, size_t len, uint8_t addr) {
   } else if((modem == RADIOLIB_LR2021_PACKET_TYPE_GFSK) || 
             (modem == RADIOLIB_LR2021_PACKET_TYPE_LR_FHSS) ||
             (modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) ||
-            (modem == RADIOLIB_LR2021_PACKET_TYPE_OOK)) {
+            (modem == RADIOLIB_LR2021_PACKET_TYPE_OOK) ||
+            (modem == RADIOLIB_LR2021_PACKET_TYPE_OQPSK)) {
     // calculate timeout (500% of expected time-on-air)
     timeout = timeout * 5;
 
@@ -407,7 +412,8 @@ int16_t LR2021::receive(uint8_t* data, size_t len, RadioLibTime_t timeout) {
     if((modem == RADIOLIB_LR2021_PACKET_TYPE_LORA) ||
        (modem == RADIOLIB_LR2021_PACKET_TYPE_GFSK) ||
        (modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) ||
-       (modem == RADIOLIB_LR2021_PACKET_TYPE_OOK)) {
+       (modem == RADIOLIB_LR2021_PACKET_TYPE_OOK) ||
+       (modem == RADIOLIB_LR2021_PACKET_TYPE_OQPSK)) {
       // calculate timeout (500 % of expected time-one-air)
       size_t maxLen = len;
       if(len == 0) { maxLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH; }
@@ -1050,6 +1056,15 @@ RadioLibTime_t LR2021::getTimeOnAir(size_t len) {
       return((float)(n_uncoded_bits + n_coded_bits) / (float)(this->bitRate / 1000.0f));
     }
 
+    // the 802.15.4 O-QPSK PHY the chip implements runs at a fixed 250 kbps (2 Mchip/s,
+    // 32 chips per symbol, 4 bits per symbol), so every bit on air takes exactly 4 us
+    case(RADIOLIB_LR2021_PACKET_TYPE_OQPSK): {
+      // the SHR is the preamble plus the 1 byte SFD, the PHR is the 1 byte frame length, and
+      // the PSDU is `len` bytes plus the 2 byte FCS the chip appends itself (see beginOQPSK)
+      size_t bits = (size_t)this->oqpskPreambleLen + (1 + 1 + len + 2)*8;
+      return((RadioLibTime_t)(bits*4));
+    }
+
     // the BLE packet structure is fixed by the Bluetooth Core specification, so the
     // time on air only depends on the PHY and the PDU length - `len` is the number of
     // PDU bytes written to the FIFO, the 3 CRC bytes are appended by the chip
@@ -1168,9 +1183,15 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
         state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLenFlrc, 1, 0x01, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK,
           (this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED) ? this->implicitLen : RADIOLIB_LR2021_MAX_PACKET_LENGTH);
 
+      } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_OQPSK) {
+        // SetOqpskPacketLen also caps the length accepted in Rx, so a preceding Tx leaves
+        // the limit at that packet's length and every longer frame is discarded with a
+        // length error - restore the maximum, the real length comes from the 802.15.4 PHR
+        state = setOqpskPacketLen(RADIOLIB_LR2021_MAX_OQPSK_PAYLOAD_LEN);
+
       } else {
-        // OQPSK and BLE have no separate Rx packet parameters - the length comes from the
-        // received header, and the rest was already programmed by their begin methods
+        // BLE has no separate Rx packet parameters - the length comes from the received
+        // header, and the rest was already programmed by beginBLE
       }
 
       RADIOLIB_ASSERT(state);

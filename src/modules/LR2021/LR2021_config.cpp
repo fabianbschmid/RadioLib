@@ -1114,8 +1114,64 @@ int16_t LR2021::ookDetector(uint16_t pattern, uint8_t len, uint8_t repeats, bool
 }
 
 int16_t LR2021::setOokDetectionThreshold(int16_t level) {
-  int16_t levelRaw = 64 + level;
-  return(this->writeRegMemMask32(RADIOLIB_LR2021_REG_OOK_DETECTION_THRESHOLD, (0x7FUL << 20), (uint32_t)levelRaw << 20));
+  // the register field is a signed 7-bit value offset by 74, so anything outside this
+  // range would wrap around and set a completely different threshold
+  if((level < RADIOLIB_LR2021_OOK_DETECTION_THRESHOLD_MIN) || (level > RADIOLIB_LR2021_OOK_DETECTION_THRESHOLD_MAX)) {
+    return(RADIOLIB_ERR_INVALID_RSSI_THRESHOLD);
+  }
+  uint32_t levelRaw = (uint32_t)(level + RADIOLIB_LR2021_OOK_DETECTION_THRESHOLD_OFFSET) & 0x7FUL;
+  return(this->writeRegMemMask32(RADIOLIB_LR2021_REG_OOK_DETECTION_THRESHOLD, (0x7FUL << 20), levelRaw << 20));
+}
+
+int16_t LR2021::getOokDetectionThreshold(int16_t* level) {
+  RADIOLIB_ASSERT_PTR(level);
+
+  uint32_t raw = 0;
+  int16_t state = this->readRegMem32(RADIOLIB_LR2021_REG_OOK_DETECTION_THRESHOLD, &raw, 1);
+  RADIOLIB_ASSERT(state);
+
+  // sign-extend the 7-bit field before undoing the offset
+  int16_t field = (int16_t)((raw >> 20) & 0x7F);
+  if(field & 0x40) { field -= 128; }
+  *level = field - RADIOLIB_LR2021_OOK_DETECTION_THRESHOLD_OFFSET;
+  return(RADIOLIB_ERR_NONE);
+}
+
+int16_t LR2021::getOokDetectionThresholdDefault(int16_t* level) {
+  RADIOLIB_ASSERT_PTR(level);
+
+  // the threshold the chip computes from the receiver bandwidth is not exposed as a command,
+  // so this is the vendor lookup table, in dBm, keyed by the bandwidth currently configured
+  static const uint8_t bwLut[] = {
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_4_8,   RADIOLIB_LR2021_GFSK_OOK_RX_BW_5_8,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_7_4,   RADIOLIB_LR2021_GFSK_OOK_RX_BW_9_7,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_12_0,  RADIOLIB_LR2021_GFSK_OOK_RX_BW_14_9,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_19_2,  RADIOLIB_LR2021_GFSK_OOK_RX_BW_23_1,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_29_8,  RADIOLIB_LR2021_GFSK_OOK_RX_BW_38_5,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_46_3,  RADIOLIB_LR2021_GFSK_OOK_RX_BW_59_5,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_76_9,  RADIOLIB_LR2021_GFSK_OOK_RX_BW_92_6,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_119_0, RADIOLIB_LR2021_GFSK_OOK_RX_BW_153_8,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_185_2, RADIOLIB_LR2021_GFSK_OOK_RX_BW_238_1,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_307_7, RADIOLIB_LR2021_GFSK_OOK_RX_BW_370_4,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_476_2, RADIOLIB_LR2021_GFSK_OOK_RX_BW_555_6,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_666_7, RADIOLIB_LR2021_GFSK_OOK_RX_BW_769_2,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_1111,  RADIOLIB_LR2021_GFSK_OOK_RX_BW_2222,
+    RADIOLIB_LR2021_GFSK_OOK_RX_BW_2666,  RADIOLIB_LR2021_GFSK_OOK_RX_BW_3076,
+  };
+  static const int16_t thrLut[] = {
+    -134, -133, -132, -131, -130, -129, -128, -127,
+    -126, -125, -124, -123, -122, -121, -120, -119,
+    -118, -117, -116, -115, -114, -113, -112, -112,
+    -110, -107, -106, -106,
+  };
+
+  for(size_t i = 0; i < sizeof(bwLut)/sizeof(bwLut[0]); i++) {
+    if(bwLut[i] == this->rxBandwidth) {
+      *level = thrLut[i];
+      return(RADIOLIB_ERR_NONE);
+    }
+  }
+  return(RADIOLIB_ERR_INVALID_RX_BANDWIDTH);
 }
 
 int16_t LR2021::setSideDetector(const LR2021LoRaSideDetector_t* cfg, size_t numDetectors) {

@@ -551,6 +551,13 @@
 // RADIOLIB_LR2021_CMD_SET_OOK_SYNCWORD
 #define RADIOLIB_LR2021_OOK_SYNC_WORD_LEN                       (4)
 
+// RADIOLIB_LR2021_REG_OOK_DETECTION_THRESHOLD
+// signed 7-bit field holding (threshold in dBm) + 74 - the 64 field offset plus the 10 dB
+// margin the vendor workaround folds into the write - so the usable range is [-138, -11] dBm
+#define RADIOLIB_LR2021_OOK_DETECTION_THRESHOLD_OFFSET          (74)
+#define RADIOLIB_LR2021_OOK_DETECTION_THRESHOLD_MIN             (-138)
+#define RADIOLIB_LR2021_OOK_DETECTION_THRESHOLD_MAX             (-11)
+
 // RADIOLIB_LR2021_CMD_SET_TX_TEST_MODE
 #define RADIOLIB_LR2021_TX_TEST_MODE_NORMAL_TX                  (0x00UL << 0)   //  7     0     Tx test mode: normal
 #define RADIOLIB_LR2021_TX_TEST_MODE_INF_PREAMBLE               (0x01UL << 0)   //  7     0                   infinite preamble
