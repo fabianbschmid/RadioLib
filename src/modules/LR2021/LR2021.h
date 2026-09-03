@@ -841,34 +841,11 @@ class LR2021: public LRxxxx {
     int16_t ookDetector(uint16_t pattern = 0x0285, uint8_t len = 16, uint8_t repeats = 0, bool syncRaw = false, bool rising = false, uint8_t sofLen = 0);
     
     /*!
-      \brief Set OOK detection threshold. Overrides the value the chip computes automatically
-      from the receiver bandwidth (see the "OOK Detection Threshold Adjustment" workaround);
-      the automatic value can land below the actual noise floor, which causes false detections
-      and missed packets. Must be called after the OOK modulation parameters have been set.
-      The register encoding folds in a 10 dB margin, so the value to pass is the measured
-      noise floor itself, not the noise floor plus a margin.
-      \param level Threshold level in dBm, in the range [-138, -11].
+      \brief Set OOK detection threshold.
+      \param level Threshold level in dB
       \returns \ref status_codes
     */
     int16_t setOokDetectionThreshold(int16_t level);
-
-    /*!
-      \brief Read back the OOK detection threshold held in the register. This reflects what
-      \ref setOokDetectionThreshold wrote - use \ref getOokDetectionThresholdDefault for the
-      value the chip computes on its own.
-      \param level Pointer to a variable to store the threshold level in dBm.
-      \returns \ref status_codes
-    */
-    int16_t getOokDetectionThreshold(int16_t* level);
-
-    /*!
-      \brief Get the OOK detection threshold the chip computes automatically for the currently
-      configured receiver bandwidth. This is the reference the workaround compares the measured
-      noise floor against; the chip does not expose it, so it comes from a lookup table.
-      \param level Pointer to a variable to store the threshold level in dBm.
-      \returns \ref status_codes
-    */
-    int16_t getOokDetectionThresholdDefault(int16_t* level);
 
     /*!
       \brief Configure LoRa side detector, which enables to detect mutiple spreading factors and receive one of them.
@@ -1018,10 +995,6 @@ class LR2021: public LRxxxx {
     uint16_t bitRateFlrc = 0;
     uint8_t codingRateFlrc = 0, syncWordLenFlrc = 0;
 
-    // cached OOK line coding (the Manchester field of SetOokPacketParams)
-    // this is separate from whitening, which OOK configures via SetOokWhiteningParams
-    uint8_t ookEncoding = RADIOLIB_LR2021_OOK_MANCHESTER_OFF;
-
     // cached OQPSK preamble length in bits, needed by the time-on-air math - the chip has
     // no command to read SetOqpskParams back
     uint16_t oqpskPreambleLen = 32;
@@ -1042,7 +1015,7 @@ class LR2021: public LRxxxx {
     int16_t config(uint8_t modem);
     int16_t setPacketMode(uint8_t mode, uint8_t len);
     int16_t startCad(uint8_t symbolNum, uint8_t detPeak, bool fast, uint8_t exitMode, RadioLibTime_t timeout);
-    size_t getGfskOokBits(size_t len, uint8_t enc);
+    size_t getGfskBits(size_t len);
 
     // chip control commands
     int16_t readRadioRxFifo(uint8_t* data, size_t len);

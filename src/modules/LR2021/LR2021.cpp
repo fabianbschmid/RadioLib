@@ -965,7 +965,7 @@ int16_t LR2021::startCad(uint8_t symbolNum, uint8_t detPeak, bool fast, uint8_t 
   return(setLoRaCad());
 }
 
-size_t LR2021::getGfskOokBits(size_t len, uint8_t enc) {
+size_t LR2021::getGfskBits(size_t len) {
   // the length header is only sent in the variable length packet formats
   size_t hdrBits = 0;
   switch(this->packetType) {
@@ -989,8 +989,7 @@ size_t LR2021::getGfskOokBits(size_t len, uint8_t enc) {
   // the low nibble of the cached CRC type is the CRC length in bytes, the high bit is the inversion flag
   size_t crcBits = (size_t)(this->crcTypeGFSK & 0x07) * 8;
 
-  // only the part after the preamble is line coded
-  return(this->preambleLengthGFSK + enc*(this->syncWordLength + hdrBits + addrBits + len*8 + crcBits));
+  return(this->preambleLengthGFSK + this->syncWordLength + hdrBits + addrBits + len*8 + crcBits);
 }
 
 RadioLibTime_t LR2021::getTimeOnAir(size_t len) {
@@ -1005,25 +1004,17 @@ RadioLibTime_t LR2021::getTimeOnAir(size_t len) {
     case(RADIOLIB_LR2021_PACKET_TYPE_LR_FHSS):
       return(LRxxxx::getToA(len, ModemType_t::RADIOLIB_MODEM_LRFHSS));
 
-    // GFSK and OOK share the same packet engine (see LR2021 datasheet section 20.2),
-    // so both are handled here instead of via LRxxxx::getToA - the base class formula
+    // GFSK is handled here instead of via LRxxxx::getToA - the base class formula
     // does not account for the length header or the address byte
-    // NOTE: unlike FLRC, these two cache the bit rate in bps
-    case(RADIOLIB_LR2021_PACKET_TYPE_GFSK):
-    case(RADIOLIB_LR2021_PACKET_TYPE_OOK): {
+    // NOTE: unlike FLRC, GFSK caches the bit rate in bps
+    case(RADIOLIB_LR2021_PACKET_TYPE_GFSK): {
       if(this->bitRate == 0) {
         RADIOLIB_DEBUG_BASIC_PRINTLN("Called getTimeOnAir() before the bit rate was set!");
         return(0);
       }
 
-      // Manchester and inverted Manchester both send two chips per bit
-      uint8_t enc = 1;
-      if((type == RADIOLIB_LR2021_PACKET_TYPE_OOK) && (this->ookEncoding != RADIOLIB_LR2021_OOK_MANCHESTER_OFF)) {
-        enc = 2;
-      }
-
       // the bit count can exceed 4294 here (RadioLibTime_t may be 32-bit), so widen before scaling to us
-      return((RadioLibTime_t)(((uint64_t)getGfskOokBits(len, enc)*1000000ULL) / (uint64_t)this->bitRate));
+      return((RadioLibTime_t)(((uint64_t)getGfskBits(len)*1000000ULL) / (uint64_t)this->bitRate));
     }
     case(RADIOLIB_LR2021_PACKET_TYPE_FLRC): {
       //! \todo [LR2021] Add FLRC to the modems supported in ModemType_t
@@ -1177,7 +1168,7 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
       } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_OOK) {
         state = setOokPacketParams(this->preambleLengthGFSK, this->addrComp, this->packetType,
           (this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED) ? this->implicitLen : RADIOLIB_LR2021_MAX_PACKET_LENGTH,
-          this->crcTypeGFSK, this->ookEncoding);
+          this->crcTypeGFSK, this->whitening);
 
       } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
         state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLenFlrc, 1, 0x01, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK,
@@ -1225,7 +1216,7 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
         state = setGfskPacketParams(this->preambleLengthGFSK, this->preambleDetLength, false, false, this->addrComp, this->packetType, cfg->transmit.len, this->crcTypeGFSK, this->whitening);
 
       } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_OOK) {
-        state = setOokPacketParams(this->preambleLengthGFSK, this->addrComp, this->packetType, cfg->transmit.len, this->crcTypeGFSK, this->ookEncoding);
+        state = setOokPacketParams(this->preambleLengthGFSK, this->addrComp, this->packetType, cfg->transmit.len, this->crcTypeGFSK, this->whitening);
 
       } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
         state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLenFlrc, 1, 0x01, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, cfg->transmit.len);
@@ -1356,7 +1347,7 @@ float LR2021::getRSSI(bool packet, bool skipReceive) {
   } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_GFSK) {
     state = this->getGfskPacketStatus(NULL, &rssi, NULL, NULL, NULL, NULL);
   } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_OOK) {
-    state = this->getOokPacketStatus(NULL, &rssi, NULL, NULL, NULL, NULL);
+    state = this->getOokPacketStatus(NULL, NULL, &rssi, NULL, NULL, NULL);
   } else if (modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
     state = this->getFlrcPacketStatus(NULL, &rssi, NULL, NULL);
   } else if (modem == RADIOLIB_LR2021_PACKET_TYPE_OQPSK) {
