@@ -41,7 +41,9 @@ int16_t LR2021::getOqpskPacketStatus(uint8_t* rxHeader, uint16_t* payloadLen, fl
     raw |= (buff[5] & 0x01);
     *rssiSync = (float)raw / -2.0f;
   }
-  if(lqi) { *lqi = buff[6] * 4.0f; }
+
+  // link quality indicator is the ratio of correlation peak to average power in 0.25 dB steps
+  if(lqi) { *lqi = (float)buff[6] * 0.25f; }
   return(state);
 }
 

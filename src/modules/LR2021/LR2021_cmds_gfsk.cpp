@@ -93,7 +93,9 @@ int16_t LR2021::getGfskPacketStatus(uint16_t* packetLen, float* rssiAvg, float* 
   }
   if(addrMatchNode) { *addrMatchNode = (buff[4] & 0x10); }
   if(addrMatchBroadcast) { *addrMatchBroadcast = (buff[4] & 0x20); }
-  if(lqi) { *lqi = buff[5] * 4.0f; }
+
+  // link quality indicator is the ratio of correlation peak to average power in 0.25 dB steps
+  if(lqi) { *lqi = (float)buff[5] * 0.25f; }
   return(state);
 }
 
