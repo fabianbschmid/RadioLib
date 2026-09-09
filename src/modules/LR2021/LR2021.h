@@ -128,12 +128,13 @@ class LR2021: public LRxxxx {
       \param rxBw Receiver bandwidth in kHz. Defaults to 153.8 kHz.
       \param power Output power in dBm. Defaults to 10 dBm.
       \param preambleLength FSK preamble length in bits. Defaults to 16 bits.
+      \param dataShaping Time-bandwidth product of the Gaussian filter to be used for shaping. Defaults to no shaping.
       \param tcxoVoltage TCXO reference voltage to be set. Defaults to 1.6 V.
       If you are seeing -706/-707 error codes, it likely means you are using non-0 value for module with XTAL.
       To use XTAL, either set this value to 0, or set LR2021::XTAL to true.
       \returns \ref status_codes
     */
-    int16_t beginGFSK(float freq = 434.0, float br = 4.8, float freqDev = 5.0, float rxBw = 153.8, int8_t power = 10, uint16_t preambleLength = 16, float tcxoVoltage = 1.6);
+    int16_t beginGFSK(float freq = 434.0, float br = 4.8, float freqDev = 5.0, float rxBw = 153.8, int8_t power = 10, uint16_t preambleLength = 16, uint8_t dataShaping = RADIOLIB_SHAPING_NONE, float tcxoVoltage = 1.6);
     
     /*!
       \brief Initialization method for OOK modem.

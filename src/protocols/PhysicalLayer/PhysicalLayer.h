@@ -308,6 +308,8 @@ struct ConfigFSK_t {
   int8_t power = 10;
   /*! \brief FSK preamble length in bits. Defaults to 16 bits. */
   uint16_t preambleLength = 16;
+  /*! \brief Time-bandwidth product of the Gaussian filter to be used for shaping. Defaults to no shaping. */
+  uint8_t dataShaping = RADIOLIB_SHAPING_NONE;
 };
 
 struct ConfigBPSK_t {

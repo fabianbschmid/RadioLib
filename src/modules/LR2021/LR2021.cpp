@@ -95,7 +95,7 @@ int16_t LR2021::beginGFSK(const ConfigFSK_t& cfg) {
   state = setSyncWord(sync, 2);
   RADIOLIB_ASSERT(state);
 
-  state = setDataShaping(RADIOLIB_SHAPING_NONE);
+  state = setDataShaping(cfg.dataShaping);
   RADIOLIB_ASSERT(state);
 
   state = setEncoding(RADIOLIB_ENCODING_NRZ);
@@ -108,7 +108,7 @@ int16_t LR2021::beginGFSK(const ConfigFSK_t& cfg) {
   return(state);
 }
 
-int16_t LR2021::beginGFSK(float freq, float br, float freqDev, float rxBw, int8_t power, uint16_t preambleLength, float tcxoVoltage) {
+int16_t LR2021::beginGFSK(float freq, float br, float freqDev, float rxBw, int8_t power, uint16_t preambleLength, uint8_t dataShaping, float tcxoVoltage) {
   ConfigFSK_t cfg;
   cfg.frequency = freq;
   cfg.bitRate = br;
@@ -116,6 +116,7 @@ int16_t LR2021::beginGFSK(float freq, float br, float freqDev, float rxBw, int8_
   cfg.receiverBandwidth = rxBw;
   cfg.power = power;
   cfg.preambleLength = preambleLength;
+  cfg.dataShaping = dataShaping;
   this->tcxoVoltage = tcxoVoltage;
   return(beginGFSK(cfg));
 }
