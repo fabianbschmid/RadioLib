@@ -1114,6 +1114,26 @@ int16_t LR2021::getModem(ModemType_t* modem) {
 int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
   int16_t state;
 
+  // everything else was programmed by prepareFastStage()
+  if(this->fastStageLen != 0) {
+    if(mode == RADIOLIB_RADIO_MODE_RX) {
+      if(cfg->receive.timeout == 0xFFFFFFFF) {
+        cfg->receive.timeout = 0xFFFFFF;
+      }
+      this->rxTimeout = cfg->receive.timeout;
+      this->stagedMode = mode;
+      return(RADIOLIB_ERR_NONE);
+    }
+    if((mode == RADIOLIB_RADIO_MODE_TX) && (cfg->transmit.len == this->fastStageLen)) {
+      state = writeRadioTxFifo(cfg->transmit.data, cfg->transmit.len);
+      RADIOLIB_ASSERT(state);
+      this->stagedMode = mode;
+      return(RADIOLIB_ERR_NONE);
+    }
+    // the full path below overwrites the packet params
+    this->fastStageLen = 0;
+  }
+
   switch(mode) {
     case(RADIOLIB_RADIO_MODE_RX): {
       // check active modem
@@ -1268,6 +1288,64 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
 
   this->stagedMode = mode;
   return(state);
+}
+
+int16_t LR2021::prepareFastStage(size_t len) {
+  this->fastStageLen = 0;
+  if(len > RADIOLIB_LR2021_MAX_PACKET_LENGTH) {
+    return(RADIOLIB_ERR_PACKET_TOO_LONG);
+  }
+
+  uint8_t modem = RADIOLIB_LR2021_PACKET_TYPE_NONE;
+  int16_t state = getPacketType(&modem);
+  RADIOLIB_ASSERT(state);
+
+  state = setRxPath(this->highFreq ? RADIOLIB_LR2021_RX_PATH_HF : RADIOLIB_LR2021_RX_PATH_LF, this->highFreq ? this->gainModeHf : this->gainModeLf);
+  RADIOLIB_ASSERT(state);
+
+  // union of the Rx and Tx mappings, so neither direction has to remap
+  state = setDioIrqConfig(this->irqDioNum, RADIOLIB_LR2021_IRQ_RX_DONE | RADIOLIB_LR2021_IRQ_TX_DONE | RADIOLIB_LR2021_IRQ_TIMEOUT);
+  RADIOLIB_ASSERT(state);
+
+  // same length for Tx and Rx, so the params hold for both directions
+  if(modem == RADIOLIB_LR2021_PACKET_TYPE_LORA) {
+    if(this->headerType == RADIOLIB_LRXXXX_LORA_HEADER_IMPLICIT) {
+      this->implicitLen = len;
+    }
+    state = setLoRaPacketParams(this->preambleLengthLoRa, this->headerType, len, this->crcTypeLoRa, this->invertIQEnabled);
+
+  } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_GFSK) {
+    state = setGfskPacketParams(this->preambleLengthGFSK, this->preambleDetLength, false, false, this->addrComp, this->packetType, len, this->crcTypeGFSK, this->whitening);
+
+  } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_OOK) {
+    state = setOokPacketParams(this->preambleLengthGFSK, this->addrComp, this->packetType, len, this->crcTypeGFSK, this->whitening);
+
+  } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
+    state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLenFlrc, 1, 0x01, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, len);
+
+  } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_OQPSK) {
+    state = setOqpskPacketLen(len);
+
+  } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_BLE) {
+    if(len < RADIOLIB_LR2021_MIN_BLE_PDU_LEN) {
+      return(RADIOLIB_ERR_PACKET_TOO_SHORT);
+    }
+    state = setBleTxPduLen(len);
+
+  } else {
+    return(RADIOLIB_ERR_WRONG_MODEM);
+  }
+  RADIOLIB_ASSERT(state);
+
+  state = clearIrqState(RADIOLIB_LR2021_IRQ_ALL);
+  RADIOLIB_ASSERT(state);
+
+  this->fastStageLen = len;
+  return(state);
+}
+
+void LR2021::endFastStage() {
+  this->fastStageLen = 0;
 }
 
 int16_t LR2021::launchMode() {

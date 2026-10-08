@@ -773,6 +773,19 @@ class LR2021: public LRxxxx {
     int16_t launchMode() override;
 
     /*!
+      \brief Program the per-packet settings stageMode() would repeat (Rx path, DIO mapping,
+      packet params) once for packets of a fixed length. Until endFastStage(), stageMode() only
+      writes the Tx FIFO for Tx and sends nothing for Rx, and IRQ flags are left for the caller to clear.
+      Any reconfiguration (begin, frequency, packet params) requires endFastStage() first.
+      \param len Length of every packet, Tx and Rx.
+      \returns \ref status_codes
+    */
+    int16_t prepareFastStage(size_t len);
+
+    /*! \brief Return stageMode() to full staging. */
+    void endFastStage();
+
+    /*!
       \brief Read the supply voltage on the Vbat pin.
       \param bits Measurement resolution in bits, 8 to 13.
       \returns \ref Supply voltage in volts.
@@ -989,6 +1002,9 @@ class LR2021: public LRxxxx {
 #endif
     uint8_t gainModeLf = RADIOLIB_LR2021_RX_BOOST_LF;
     uint8_t gainModeHf = RADIOLIB_LR2021_RX_BOOST_HF;
+
+    // packet length programmed by prepareFastStage(), 0 = full staging
+    size_t fastStageLen = 0;
 
     // cached FLRC parameters
     // FLRC keeps its own sync word length (in bytes), because the shared LRxxxx::syncWordLength
