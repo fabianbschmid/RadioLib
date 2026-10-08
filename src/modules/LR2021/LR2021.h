@@ -786,6 +786,13 @@ class LR2021: public LRxxxx {
     void endFastStage();
 
     /*!
+      \brief Drop the staged operation: clears the FIFO of its direction. Use it instead of
+      launchMode() for a staged one, or after standby() for a launched one that was aborted.
+      \returns \ref status_codes
+    */
+    int16_t cancelStage();
+
+    /*!
       \brief Read the supply voltage on the Vbat pin.
       \param bits Measurement resolution in bits, 8 to 13.
       \returns \ref Supply voltage in volts.

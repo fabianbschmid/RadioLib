@@ -1348,6 +1348,18 @@ void LR2021::endFastStage() {
   this->fastStageLen = 0;
 }
 
+int16_t LR2021::cancelStage() {
+  RadioModeType_t mode = this->stagedMode;
+  this->stagedMode = RADIOLIB_RADIO_MODE_NONE;
+  if(mode == RADIOLIB_RADIO_MODE_TX) {
+    return(clearTxFifo());
+  }
+  if(mode == RADIOLIB_RADIO_MODE_RX) {
+    return(clearRxFifo());
+  }
+  return(RADIOLIB_ERR_NONE);
+}
+
 int16_t LR2021::launchMode() {
   int16_t state;
   switch(this->stagedMode) {
