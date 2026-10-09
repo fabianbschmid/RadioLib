@@ -773,11 +773,11 @@ class LR2021: public LRxxxx {
     int16_t launchMode() override;
 
     /*!
-      \brief Program the per-packet settings stageMode() would repeat (Rx path, DIO mapping,
-      packet params) once for packets of a fixed length. Until endFastStage(), stageMode() only
-      writes the Tx FIFO for Tx and sends nothing for Rx, and IRQ flags are left for the caller to clear.
+      \brief Program the per-packet settings stageMode() would repeat (Rx path, DIO mapping) once.
+      Until endFastStage(), stageMode() only sets the packet length (and writes the Tx FIFO for Tx),
+      and IRQ flags are left for the caller to clear.
       Any reconfiguration (begin, frequency, packet params) requires endFastStage() first.
-      \param len Length of every packet, Tx and Rx.
+      \param len Packet length, used as the implicit LoRa header length.
       \returns \ref status_codes
     */
     int16_t prepareFastStage(size_t len);
@@ -791,6 +791,13 @@ class LR2021: public LRxxxx {
       \returns \ref status_codes
     */
     int16_t cancelStage();
+
+    /*!
+      \brief Stop the Rx timeout on preamble detection instead of sync word / header.
+      \param stop Whether to stop the timeout on preamble detection.
+      \returns \ref status_codes
+    */
+    int16_t stopTimeoutOnPreamble(bool stop);
 
     /*!
       \brief Read the supply voltage on the Vbat pin.
@@ -1010,8 +1017,11 @@ class LR2021: public LRxxxx {
     uint8_t gainModeLf = RADIOLIB_LR2021_RX_BOOST_LF;
     uint8_t gainModeHf = RADIOLIB_LR2021_RX_BOOST_HF;
 
-    // packet length programmed by prepareFastStage(), 0 = full staging
-    size_t fastStageLen = 0;
+    // modem cached by prepareFastStage(), NONE = full staging
+    uint8_t fastStageModem = RADIOLIB_LR2021_PACKET_TYPE_NONE;
+
+    // packet params for one staged operation: the exact length for Tx, the maximum for Rx
+    int16_t setStagePacketParams(uint8_t modem, RadioModeType_t mode, size_t len);
 
     // cached FLRC parameters
     // FLRC keeps its own sync word length (in bytes), because the shared LRxxxx::syncWordLength

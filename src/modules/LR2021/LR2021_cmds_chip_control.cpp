@@ -132,6 +132,11 @@ int16_t LR2021::setTx(uint32_t timeout) {
   return(retVal);
 }
 
+int16_t LR2021::stopTimeoutOnPreamble(bool stop) {
+  uint8_t buff[] = { (uint8_t)stop };
+  return(this->SPIcommand(RADIOLIB_LR2021_CMD_STOP_TIMEOUT_ON_PREAMBLE, true, buff, sizeof(buff)));
+}
+
 int16_t LR2021::setRxTxFallbackMode(uint8_t mode) {
   return(this->SPIcommand(RADIOLIB_LR2021_CMD_SET_RX_TX_FALLBACK_MODE, true, &mode, sizeof(mode)));
 }
