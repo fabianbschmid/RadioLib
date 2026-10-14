@@ -1180,6 +1180,9 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
     } else {
       state = writeRadioTxFifo(cfg->transmit.data, cfg->transmit.len);
       RADIOLIB_ASSERT(state);
+      // see the TX case below: launch from FS, not from standby
+      state = setFs();
+      RADIOLIB_ASSERT(state);
     }
     this->stagedMode = mode;
     return(RADIOLIB_ERR_NONE);
@@ -1274,6 +1277,10 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
 
       // clear interrupt flags
       state = clearIrqState(RADIOLIB_LR2021_IRQ_ALL);
+      RADIOLIB_ASSERT(state);
+
+      // start the synthesizer now, SetTx straight from standby corrupts FLRC payloads below 2 Mbps
+      state = setFs();
       RADIOLIB_ASSERT(state);
     } break;
     

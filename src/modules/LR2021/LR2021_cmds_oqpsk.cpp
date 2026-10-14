@@ -11,7 +11,7 @@ int16_t LR2021::setOqpskParams(uint8_t mode, uint8_t rxBw, uint8_t payloadLen, u
   uint8_t buff[] = { 
     mode, rxBw, payloadLen,
     (uint8_t)((preambleLen >> 8) & 0xFF), (uint8_t)(preambleLen & 0xFF),
-    (uint8_t)((uint8_t)addrFilt << 1 | (uint8_t)fcsManual),
+    (uint8_t)((uint8_t)addrFilt << 2 | (uint8_t)fcsManual),
   };
   return(this->SPIcommand(RADIOLIB_LR2021_CMD_SET_OQPSK_PARAMS, true, buff, sizeof(buff)));
 }
