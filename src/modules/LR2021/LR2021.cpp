@@ -1170,6 +1170,11 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
     if((mode == RADIOLIB_RADIO_MODE_TX) && (len > RADIOLIB_LR2021_MAX_PACKET_LENGTH)) {
       return(RADIOLIB_ERR_PACKET_TOO_LONG);
     }
+    // like the full path below: in implicit LoRa header mode a nonzero Rx length replaces the staged one
+    if((mode == RADIOLIB_RADIO_MODE_RX) && (this->fastStageModem == RADIOLIB_LR2021_PACKET_TYPE_LORA) &&
+      (this->headerType == RADIOLIB_LRXXXX_LORA_HEADER_IMPLICIT) && (cfg->receive.len != 0)) {
+      this->implicitLen = cfg->receive.len;
+    }
     state = setStagePacketParams(this->fastStageModem, mode, len);
     RADIOLIB_ASSERT(state);
     if(mode == RADIOLIB_RADIO_MODE_RX) {

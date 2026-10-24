@@ -45,10 +45,15 @@ RadioLibTime_t LRxxxx::getToA(size_t len, ModemType_t modem) {
     case ModemType_t::RADIOLIB_MODEM_LORA: {
       uint8_t cr = this->codingRate;
       // We assume same calculation for short and long interleaving, so map CR values 0-4 and 5-7 to the same values
+      // (LR2021 only: 8 and 9 are the long-interleaver convolutional codes 4/6 and 4/8)
       if (cr < 5) {
         cr = cr + 4;
       } else if (cr == 7) {
         cr = cr + 1;
+      } else if (cr == 8) {
+        cr = 6;
+      } else if (cr == 9) {
+        cr = 8;
       }
 
       dr.lora.spreadingFactor = this->spreadingFactor;

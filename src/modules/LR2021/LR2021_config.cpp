@@ -117,8 +117,9 @@ int16_t LR2021::setFrequency(float freq, bool skipCalibration) {
           return(state);
         }
 
-        // wait a little while before the next attempt
-        this->mod->hal->delay(5);
+        // wait before the next attempt; spread over ~1 s so one attempt lands between the
+        // packets of a nearby transmitter (a LoRa SF12 packet lasts up to ~750 ms)
+        this->mod->hal->delay(100);
       
       } else {
         // calibration passed
@@ -128,7 +129,7 @@ int16_t LR2021::setFrequency(float freq, bool skipCalibration) {
     }
 
     if(i == RADIOLIB_LR2021_MAX_CAL_ATTEMPTS) {
-      return(RADIOLIB_ERR_FRONTEND_CALIBRATION_FAILED);
+      RADIOLIB_DEBUG_BASIC_PRINTLN("Frontend calibration gave up after %d attempts (RSSI saturation), continuing uncalibrated", i);
     }
 
   }
@@ -335,7 +336,7 @@ int16_t LR2021::setSpreadingFactor(uint8_t sf, bool legacy) {
   return(setLoRaModulationParams(this->spreadingFactor, this->bandwidth, this->codingRate, this->ldrOptimize));
 }
 
-int16_t LR2021::setCodingRate(uint8_t cr, bool longInterleave) {
+int16_t LR2021::setCodingRate(uint8_t cr, bool longInterleave, bool convolutional) {
   // check active modem
   uint8_t type = RADIOLIB_LR2021_PACKET_TYPE_NONE;
   int16_t state = getPacketType(&type);
@@ -343,7 +344,20 @@ int16_t LR2021::setCodingRate(uint8_t cr, bool longInterleave) {
   if(type == RADIOLIB_LR2021_PACKET_TYPE_LORA) {
     RADIOLIB_CHECK_RANGE(cr, 4, 8, RADIOLIB_ERR_INVALID_CODING_RATE);
 
-    if(longInterleave) {
+    if(convolutional) {
+      // convolutional codes exist only with the long interleaver, for 4/6 and 4/8
+      switch(cr) {
+        case 6:
+          this->codingRate = RADIOLIB_LR2021_LORA_CR_4_6_LI_CONV;
+          break;
+        case 8:
+          this->codingRate = RADIOLIB_LR2021_LORA_CR_4_8_LI_CONV;
+          break;
+        default:
+          return(RADIOLIB_ERR_INVALID_CODING_RATE);
+      }
+
+    } else if(longInterleave) {
       switch(cr) {
         case 4:
           this->codingRate = 0;

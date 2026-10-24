@@ -581,9 +581,11 @@ class LR2021: public LRxxxx {
       \param longInterleave Enable long interleaver when set to true.
       Note that with long interleaver enabled, CR 4/7 is not possible, there are packet length restrictions,
       and it is not compatible with SX127x radios!
+      \param convolutional Use the long-interleaver convolutional code (CR 4/6 or 4/8 only,
+      implies the long interleaver; not compatible with SX127x, SX126x, SX128x or LR11xx).
       \returns \ref status_codes
     */
-    int16_t setCodingRate(uint8_t cr, bool longInterleave = false);
+    int16_t setCodingRate(uint8_t cr, bool longInterleave = false, bool convolutional = false);
 
     /*!
       \brief Sets LoRa sync word.
