@@ -360,8 +360,9 @@ int16_t SX1278::setOutputPower(int8_t power, bool forceRfo) {
   if(useRfo) {
     uint8_t paCfg = 0;
     if(power < 0) {
-      // low power mode RFO output
-      paCfg = RADIOLIB_SX1278_LOW_POWER | (power + 3);
+      // low power mode RFO output: MaxPower 0 (P_max = 10.8 dBm), OutputPower = power + 4
+      // (LOW_POWER | (power + 3) wrapped -4 dBm to 0xFF, i.e. full power)
+      paCfg = (uint8_t)(power + 4);
     } else {
       // high power mode RFO output
       paCfg = RADIOLIB_SX1278_MAX_POWER | power;
